@@ -1,8 +1,8 @@
 subscribers:
 
   camera_reading:
-    topic: /drone1/front_cam/camera/image
-    queue_size: 1
+    topic: /darknet_ros/camera_reading
+    queue_size: 10
 
 actions:
 
@@ -17,7 +17,7 @@ publishers:
     latch: false
 
   bounding_boxes:
-    topic: /darknet_ros/bounding_boxes
+    topic: /darknet_ros/bounding_boxe
     queue_size: 1
     latch: false
 
@@ -28,6 +28,6 @@ publishers:
 
 image_view:
 
-  enable_opencv: true
+  enable_opencv: false
   wait_key_delay: 1
   enable_console_output: true

@@ -57,6 +57,8 @@ extern "C" {
 #include "utils.h"
 }
 
+#define BUFF_SIZE 3
+
 extern "C" void ipl_into_image(IplImage* src, image im);
 extern "C" image ipl_to_image(IplImage* src);
 extern "C" void show_image_cv(image p, const char* name, IplImage* disp);
@@ -169,10 +171,10 @@ class YoloObjectDetector {
   int demoClasses_;
 
   network* net_;
-  std_msgs::Header headerBuff_[3];
-  image buff_[3];
-  image buffLetter_[3];
-  int buffId_[3];
+  std_msgs::Header headerBuff_[BUFF_SIZE];
+  image buff_[BUFF_SIZE];
+  image buffLetter_[BUFF_SIZE];
+  int buffId_[BUFF_SIZE];
   int buffIndex_ = 0;
   IplImage* ipl_;
   float fps_ = 0;

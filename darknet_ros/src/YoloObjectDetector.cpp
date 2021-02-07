@@ -230,8 +230,9 @@ bool YoloObjectDetector::isCheckingForObjects() const {
 bool YoloObjectDetector::publishDetectionImage(const cv::Mat& detectionImage) {
   if (detectionImagePublisher_.getNumSubscribers() < 1) return false;
   cv_bridge::CvImage cvImage;
-  cvImage.header.stamp = ros::Time::now();
-  cvImage.header.frame_id = "detection_image";
+  cvImage.header.stamp = imageHeader_.stamp;
+  cvImage.header.frame_id = imageHeader_.frame_id;
+  cvImage.header.seq = imageHeader_.seq;
   cvImage.encoding = sensor_msgs::image_encodings::BGR8;
   cvImage.image = detectionImage;
   detectionImagePublisher_.publish(*cvImage.toImageMsg());
@@ -295,7 +296,7 @@ void* YoloObjectDetector::detectInThread() {
   float nms = .4;
 
   layer l = net_->layers[net_->n - 1];
-  float* X = buffLetter_[(buffIndex_ + 2) % 3].data;
+  float* X = buffLetter_[(buffIndex_ + 2) % BUFF_SIZE].data;
   float* prediction = network_predict(net_, X);
 
   rememberNetwork(net_);
@@ -311,7 +312,7 @@ void* YoloObjectDetector::detectInThread() {
     printf("\nFPS:%.1f\n", fps_);
     printf("Objects:\n\n");
   }
-  image display = buff_[(buffIndex_ + 2) % 3];
+  image display = buff_[(buffIndex_ + 2) % BUFF_SIZE];
   draw_detections(display, dets, nboxes, demoThresh_, demoNames_, demoAlphabet_, demoClasses_);
 
   // extract the bounding boxes and send them to ROS
@@ -380,7 +381,7 @@ void* YoloObjectDetector::fetchInThread() {
 }
 
 void* YoloObjectDetector::displayInThread(void* ptr) {
-  show_image_cv(buff_[(buffIndex_ + 1) % 3], "YOLO V3", ipl_);
+  show_image_cv(buff_[(buffIndex_ + 1) % BUFF_SIZE], "YOLO V3", ipl_);
   int c = cv::waitKey(waitKeyDelay_);
   if (c != -1) c = c % 256;
   if (c == 27) {
@@ -485,27 +486,36 @@ void YoloObjectDetector::yolo() {
 
   demoTime_ = what_time_is_it_now();
 
+  int prevSeq_ = 0;
   while (!demoDone_) {
-    buffIndex_ = (buffIndex_ + 1) % 3;
+    buffIndex_ = (buffIndex_ + 1) % BUFF_SIZE;
     fetch_thread = std::thread(&YoloObjectDetector::fetchInThread, this);
-    detect_thread = std::thread(&YoloObjectDetector::detectInThread, this);
-    if (!demoPrefix_) {
-      fps_ = 1. / (what_time_is_it_now() - demoTime_);
-      demoTime_ = what_time_is_it_now();
-      if (viewImage_) {
-        displayInThread(0);
+    if (prevSeq_ != headerBuff_[buffIndex_].seq)
+    {
+      detect_thread = std::thread(&YoloObjectDetector::detectInThread, this);
+      if (!demoPrefix_) {
+        fps_ = 1. / (what_time_is_it_now() - demoTime_);
+        demoTime_ = what_time_is_it_now();
+        if (viewImage_) {
+          displayInThread(0);
+        } else {
+          generate_image(buff_[(buffIndex_ + 1) % BUFF_SIZE], ipl_);
+        }
+        publishInThread();
       } else {
-        generate_image(buff_[(buffIndex_ + 1) % 3], ipl_);
+        char name[256];
+        sprintf(name, "%s_%08d", demoPrefix_, count);
+        save_image(buff_[(buffIndex_ + 1) % BUFF_SIZE], name);
       }
-      publishInThread();
-    } else {
-      char name[256];
-      sprintf(name, "%s_%08d", demoPrefix_, count);
-      save_image(buff_[(buffIndex_ + 1) % 3], name);
+      prevSeq_ = headerBuff_[buffIndex_].seq;
+      fetch_thread.join();
+      detect_thread.join();
+      ++count;
     }
-    fetch_thread.join();
-    detect_thread.join();
-    ++count;
+    else
+    {
+      fetch_thread.join();
+    }
     if (!isNodeRunning()) {
       demoDone_ = true;
     }
@@ -548,8 +558,9 @@ void* YoloObjectDetector::publishInThread() {
     }
 
     darknet_ros_msgs::ObjectCount msg;
-    msg.header.stamp = ros::Time::now();
-    msg.header.frame_id = "detection";
+    msg.header.stamp = imageHeader_.stamp;
+    msg.header.frame_id = imageHeader_.frame_id;
+    msg.header.seq = imageHeader_.seq;
     msg.count = num;
     objectPublisher_.publish(msg);
 
@@ -576,12 +587,13 @@ void* YoloObjectDetector::publishInThread() {
     }
     boundingBoxesResults_.header.stamp = ros::Time::now();
     boundingBoxesResults_.header.frame_id = "detection";
-    boundingBoxesResults_.image_header = headerBuff_[(buffIndex_ + 1) % 3];
+    boundingBoxesResults_.image_header = headerBuff_[(buffIndex_ + 1) % BUFF_SIZE];
     boundingBoxesPublisher_.publish(boundingBoxesResults_);
   } else {
     darknet_ros_msgs::ObjectCount msg;
-    msg.header.stamp = ros::Time::now();
-    msg.header.frame_id = "detection";
+    msg.header.stamp = imageHeader_.stamp;
+    msg.header.frame_id = imageHeader_.frame_id;
+    msg.header.seq = imageHeader_.seq;
     msg.count = 0;
     objectPublisher_.publish(msg);
   }
