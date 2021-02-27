@@ -17,7 +17,7 @@ publishers:
     latch: false
 
   bounding_boxes:
-    topic: /darknet_ros/bounding_boxe
+    topic: /darknet_ros/bounding_box
     queue_size: 1
     latch: false
 
@@ -28,6 +28,6 @@ publishers:
 
 image_view:
 
-  enable_opencv: false
+  enable_opencv: true
   wait_key_delay: 1
   enable_console_output: true
